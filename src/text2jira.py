@@ -74,7 +74,7 @@ def create_issues_in_jira(*, issue_dicts, server, basic_auth, board_name, assign
 
     jira.add_issues_to_sprint(last_sprint.id, [create_issues_result['issue_obj'].key
                                                for create_issues_result in create_issues_results
-                                               if create_issues_result['issue_dict']['add_to_sprint']])
+                                               if create_issues_result['issue_dict'].get('add_to_sprint', False)])
 
 
 def parse_issues(src):
@@ -89,6 +89,9 @@ def parse_issues(src):
         code = line[0]
         text = line[1:].strip()
         if code == '-':
+            if len(text) == 0:
+                print('skipping empty task')
+                continue
             if '(X)' in text:
                 text = text.replace('(X)', '').strip()
                 add_to_sprint = True
@@ -97,11 +100,17 @@ def parse_issues(src):
             curr_issue = dict(summary=text, sub_issues=[], description='', add_to_sprint=add_to_sprint)
             issue_dicts.append(curr_issue)
         elif code == '+':
+            if len(text) == 0:
+                print('skipping empty sub-task')
+                continue
             sub_issue = dict(summary=text, sub_issues=[], description='')
             curr_issue['sub_issues'].append(sub_issue)
-            curr_issue = sub_issue
         elif code == '*':
             if curr_issue is None:
+                print('no task associated with description \'{}\''.format(text))
+                continue
+            if len(text) == 0:
+                print('skipping empty description')
                 continue
             curr_issue['description'] += '* {}\n'.format(text)
     return issue_dicts
