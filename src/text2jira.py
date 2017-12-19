@@ -5,7 +5,7 @@ from jira import JIRA
 MAX_RESULTS = 100000
 
 
-def create_issues_in_jira(*, issue_list, server, basic_auth, board_name, assignee_key, components, max_results):
+def create_issues_in_jira(*, issue_dicts, server, basic_auth, board_name, assignee_key, components, max_results):
     jira = JIRA(server=server, basic_auth=basic_auth)
 
     def get_board(board_name):
@@ -41,7 +41,7 @@ def create_issues_in_jira(*, issue_list, server, basic_auth, board_name, assigne
                 raise Exception('component not found: \'{}\''.format(component))
             component_ids.append(component_obj.id)
 
-    issue_objs = []
+    create_issues_results = []
 
     def _create_issue(issue_dict, parent=None):
         fields_list = [
@@ -63,22 +63,24 @@ def create_issues_in_jira(*, issue_list, server, basic_auth, board_name, assigne
         issue_obj = result['issue']
         for sub_issue_dict in issue_dict['sub_issues']:
             _create_issue(sub_issue_dict, issue_obj)
-        issue_objs.append(issue_obj)
+        create_issues_results.append(dict(issue_dict=issue_dict, issue_obj=issue_obj))
 
-    for issue in issue_list:
-        _create_issue(issue)
+    for issue_dict in issue_dicts:
+        _create_issue(issue_dict)
 
     sprints = jira.sprints(board.id, extended=['startDate', 'endDate'], maxResults=max_results)
     assert len(sprints) > 0
     last_sprint = sprints[-1]
 
-    jira.add_issues_to_sprint(last_sprint.id, [issue_obj.key for issue_obj in issue_objs])
+    jira.add_issues_to_sprint(last_sprint.id, [create_issues_result['issue_obj'].key
+                                               for create_issues_result in create_issues_results
+                                               if create_issues_result['issue_dict']['add_to_sprint']])
 
 
-def text2jira(*, src, server, basic_auth, board_name, assignee_key, components, max_results=MAX_RESULTS):
+def parse_issues(src):
     with open(src, 'rt') as src_file:
         lines = list(src_file.readlines())
-    issue_list = []
+    issue_dicts = []
     curr_issue = None
     for line in lines:
         line = line.strip()
@@ -87,8 +89,13 @@ def text2jira(*, src, server, basic_auth, board_name, assignee_key, components, 
         code = line[0]
         text = line[1:].strip()
         if code == '-':
-            curr_issue = dict(summary=text, sub_issues=[], description='')
-            issue_list.append(curr_issue)
+            if '(X)' in text:
+                text = text.replace('(X)', '').strip()
+                add_to_sprint = True
+            else:
+                add_to_sprint = False
+            curr_issue = dict(summary=text, sub_issues=[], description='', add_to_sprint=add_to_sprint)
+            issue_dicts.append(curr_issue)
         elif code == '+':
             sub_issue = dict(summary=text, sub_issues=[], description='')
             curr_issue['sub_issues'].append(sub_issue)
@@ -97,8 +104,12 @@ def text2jira(*, src, server, basic_auth, board_name, assignee_key, components, 
             if curr_issue is None:
                 continue
             curr_issue['description'] += '* {}\n'.format(text)
+    return issue_dicts
 
-    create_issues_in_jira(issue_list=issue_list,
+
+def text2jira(*, src, server, basic_auth, board_name, assignee_key, components, max_results=MAX_RESULTS):
+    issue_dicts = parse_issues(src)
+    create_issues_in_jira(issue_dicts=issue_dicts,
                           server=server,
                           basic_auth=basic_auth,
                           board_name=board_name,
