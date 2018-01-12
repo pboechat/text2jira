@@ -49,7 +49,7 @@ def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, as
                 raise Exception('component not found: \'{}\''.format(component))
             component_ids.append(component_obj.id)
 
-    if epic_link is not None:
+    if epic_link:
         search_result = jira.search_issues("summary ~ '{}'".format(epic_link))
         if len(search_result) == 0:
             raise Exception('epic not found: \'{}\''.format(epic_link))
@@ -88,14 +88,15 @@ def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, as
 
     if epic is not None:
         jira.add_issues_to_epic(epic.id, [create_issues_result['issue_obj'].key
-                                          for create_issues_result in create_issues_results])
+                                          for create_issues_result in create_issues_results
+                                          if create_issues_result['issue_obj'].fields.issuetype.name == 'Task'])
 
     issues_to_add_to_sprint = [create_issues_result['issue_obj'].key
                                for create_issues_result in create_issues_results
                                if create_issues_result['issue_dict'].get('add_to_sprint', False)]
     if issues_to_add_to_sprint:
         sprints = jira.sprints(board.id, extended=['startDate', 'endDate'], maxResults=max_results)
-        if len(sprints) > 0:
+        if len(sprints) == 0:
             raise Exception('There\'s no open sprint')
         last_sprint = sprints[-1]
         jira.add_issues_to_sprint(last_sprint.id, issues_to_add_to_sprint)
