@@ -98,7 +98,7 @@ def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, as
         if len(sprints) > 0:
             raise Exception('There\'s no open sprint')
         last_sprint = sprints[-1]
-        jira.add_issues_to_sprint(last_sprint.id, )
+        jira.add_issues_to_sprint(last_sprint.id, issues_to_add_to_sprint)
 
 
 def parse_issues(src):
