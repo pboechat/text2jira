@@ -11,7 +11,8 @@ from jira import JIRA
 MAX_RESULTS = 100000
 
 
-def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, assignee_key, components, max_results):
+def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, assignee_key, components, epic_link,
+                          max_results):
     jira = JIRA(server=server_url, basic_auth=basic_auth)
 
     def get_board(board_name):
@@ -48,6 +49,16 @@ def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, as
                 raise Exception('component not found: \'{}\''.format(component))
             component_ids.append(component_obj.id)
 
+    if epic_link is not None:
+        search_result = jira.search_issues("summary ~ '{}'".format(epic_link))
+        if len(search_result) == 0:
+            raise Exception('epic not found: \'{}\''.format(epic_link))
+        elif len(search_result) > 1:
+            raise Exception('more than one epic found for name \'{}\''.format(epic_link))
+        epic = search_result[0]
+    else:
+        epic = None
+
     create_issues_results = []
 
     def _create_issue(issue_dict, parent=None):
@@ -74,6 +85,10 @@ def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, as
 
     for issue_dict in issue_dicts:
         _create_issue(issue_dict)
+
+    if epic is not None:
+        jira.add_issues_to_epic(epic.id, [create_issues_result['issue_obj'].key
+                                          for create_issues_result in create_issues_results])
 
     issues_to_add_to_sprint = [create_issues_result['issue_obj'].key
                                for create_issues_result in create_issues_results
@@ -125,7 +140,7 @@ def parse_issues(src):
     return issue_dicts
 
 
-def text2jira(*, src, server_url, basic_auth, board_name, assignee_key, components, max_results=MAX_RESULTS):
+def text2jira(*, src, server_url, basic_auth, board_name, assignee_key, components, epic_link, max_results=MAX_RESULTS):
     issue_dicts = parse_issues(src)
     create_issues_in_jira(issue_dicts=issue_dicts,
                           server_url=server_url,
@@ -133,6 +148,7 @@ def text2jira(*, src, server_url, basic_auth, board_name, assignee_key, componen
                           board_name=board_name,
                           assignee_key=assignee_key,
                           components=components,
+                          epic_link=epic_link,
                           max_results=max_results)
 
 
@@ -251,7 +267,7 @@ class Text2JiraGUI(tk.Frame):
         self._master = master
         self._master.wm_title('text2jira')
         self._master.resizable(width=False, height=False)
-        self._master.geometry('{}x{}'.format(300, 325))
+        self._master.geometry('{}x{}'.format(300, 385))
         menu_bar = tk.Menu(self._master)
         file_menu = tk.Menu(menu_bar, tearoff=0)
         file_menu.add_command(label='Load', command=self.on_load)
@@ -276,6 +292,9 @@ class Text2JiraGUI(tk.Frame):
         tk.Label(self, text='Components').pack()
         self._components = tk.StringVar()
         tk.Entry(self, textvariable=self._components, width=200).pack(padx=5, pady=5)
+        tk.Label(self, text='Epic Link').pack()
+        self._epic_link = tk.StringVar()
+        tk.Entry(self, textvariable=self._epic_link, width=200).pack(padx=5, pady=5)
         tk.Label(self, text='Filename').pack()
         self._filename = tk.StringVar()
         tk.Entry(self, textvariable=self._filename, state='disabled', width=200).pack(padx=5, pady=5)
@@ -340,6 +359,8 @@ class Text2JiraGUI(tk.Frame):
         else:
             components = None
 
+        epic_link = self._epic_link.get()
+
         src = self._filename.get()
         if not src:
             showerror('Error', 'You need to inform an filename')
@@ -351,7 +372,8 @@ class Text2JiraGUI(tk.Frame):
                       basic_auth=basic_auth,
                       board_name=board_name,
                       assignee_key=assignee_key,
-                      components=components)
+                      components=components,
+                      epic_link=epic_link)
             showinfo('Info', 'text2jira ran successfully')
         except Exception as e:
             traceback.print_exc()
@@ -370,6 +392,7 @@ def main():
     parser.add_argument('--board_name', type=str, required=False, help='board name')
     parser.add_argument('--assignee_key', type=str, required=False, help='assignee key')
     parser.add_argument('--components', type=str, nargs='*', required=False, help='components')
+    parser.add_argument('--epic_link', type=str, required=False, help='epic link')
     parser.add_argument('--no-gui', type=_str_to_bool, required=False, default=False)
     args = parser.parse_args()
     if args.no_gui:
@@ -395,7 +418,8 @@ def main():
                       basic_auth=args.basic_auth,
                       board_name=args.board_name,
                       assignee_key=args.assignee_key,
-                      components=args.components)
+                      components=args.components,
+                      epic_link=args.epic_link)
         except Exception as e:
             print(str(e))
     else:
