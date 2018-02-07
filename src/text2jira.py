@@ -3,6 +3,7 @@ import sqlite3
 import tkinter as tk
 import tkinter.ttk as ttk
 import traceback
+import re
 from tkinter.filedialog import askopenfilename
 from tkinter.messagebox import showinfo, showerror
 
@@ -68,7 +69,7 @@ def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, as
                 'summary': issue_dict['summary'],
                 'description': issue_dict['description'],
                 'issuetype': {'name': 'Task' if parent is None else 'Sub-task'},
-                'assignee': {'name': assignee_key}
+                'assignee': {'name': issue_dict['assignee'] if issue_dict['assignee'] else assignee_key}
             }
         ]
         if component_ids is not None:
@@ -105,14 +106,29 @@ def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, as
 def parse_issues(src):
     with open(src, 'rt') as src_file:
         lines = list(src_file.readlines())
+    return parse_lines(lines)
+
+def parse_lines(lines):
+    assignee_matcher = re.compile(r"""(.*)\[([a-zA-z0-9]+)\]$""")
+
     issue_dicts = []
     curr_issue = None
+    curr_description_holder = None
     for line in lines:
         line = line.strip()
         if len(line) == 0:
             continue
         code = line[0]
         text = line[1:].strip()
+
+        # search for optional assignee
+        match_obj = assignee_matcher.search(text)
+        if match_obj:
+            text = match_obj.group(1).strip()
+            assignee = match_obj.group(2)
+        else:
+            assignee = None
+
         if code == '-':
             if len(text) == 0:
                 print('skipping empty task')
@@ -122,22 +138,24 @@ def parse_issues(src):
                 add_to_sprint = True
             else:
                 add_to_sprint = False
-            curr_issue = dict(summary=text, sub_issues=[], description='', add_to_sprint=add_to_sprint)
+            curr_issue = dict(summary=text, sub_issues=[], description='', add_to_sprint=add_to_sprint, assignee = assignee)
+            curr_description_holder = curr_issue
             issue_dicts.append(curr_issue)
         elif code == '+':
             if len(text) == 0:
                 print('skipping empty sub-task')
                 continue
-            sub_issue = dict(summary=text, sub_issues=[], description='')
+            sub_issue = dict(summary=text, sub_issues=[], description='', assignee = assignee)
+            curr_description_holder = sub_issue
             curr_issue['sub_issues'].append(sub_issue)
         elif code == '*':
-            if curr_issue is None:
-                print('no task associated with description \'{}\''.format(text))
+            if curr_description_holder is None:
+                print('no description holder to accept the description \'{}\''.format(text))
                 continue
             if len(text) == 0:
                 print('skipping empty description')
                 continue
-            curr_issue['description'] += '* {}\n'.format(text)
+            curr_description_holder["description"] += '* {}\n'.format(text)
     return issue_dicts
 
 
@@ -401,7 +419,7 @@ def main():
             print('src cannot be None')
             exit(-1)
 
-        if args.server is None:
+        if args.server_url is None:
             print('server cannot be None')
             exit(-1)
 
