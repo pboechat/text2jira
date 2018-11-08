@@ -1,9 +1,9 @@
 import argparse
+import re
 import sqlite3
 import tkinter as tk
 import tkinter.ttk as ttk
 import traceback
-import re
 from tkinter.filedialog import askopenfilename
 from tkinter.messagebox import showinfo, showerror
 
@@ -12,8 +12,8 @@ from jira import JIRA
 MAX_RESULTS = 100000
 
 
-def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, assignee_key, components, epic_link,
-                          max_results):
+def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, project_name, board_name, assignee_key, components,
+                          epic_link, max_results):
     jira = JIRA(server=server_url, basic_auth=basic_auth)
 
     def get_board(board_name):
@@ -28,10 +28,13 @@ def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, board_name, as
                 return project
         return None
 
+    project = get_project(project_name)
+    if not project:
+        raise Exception('project not found: \'{}\''.format(board_name))
+
     board = get_board(board_name)
     if not board:
         raise Exception('board not found: \'{}\''.format(board_name))
-    project = get_project(board.location.displayText)
 
     component_ids = None
     if components is not None:
@@ -108,6 +111,7 @@ def parse_issues(src):
         lines = list(src_file.readlines())
     return parse_lines(lines)
 
+
 def parse_lines(lines):
     assignee_matcher = re.compile(r"""(.*)\[([a-zA-z0-9]+)\]$""")
 
@@ -138,14 +142,15 @@ def parse_lines(lines):
                 add_to_sprint = True
             else:
                 add_to_sprint = False
-            curr_issue = dict(summary=text, sub_issues=[], description='', add_to_sprint=add_to_sprint, assignee = assignee)
+            curr_issue = dict(summary=text, sub_issues=[], description='', add_to_sprint=add_to_sprint,
+                              assignee=assignee)
             curr_description_holder = curr_issue
             issue_dicts.append(curr_issue)
         elif code == '+':
             if len(text) == 0:
                 print('skipping empty sub-task')
                 continue
-            sub_issue = dict(summary=text, sub_issues=[], description='', assignee = assignee)
+            sub_issue = dict(summary=text, sub_issues=[], description='', assignee=assignee)
             curr_description_holder = sub_issue
             curr_issue['sub_issues'].append(sub_issue)
         elif code == '*':
@@ -159,11 +164,12 @@ def parse_lines(lines):
     return issue_dicts
 
 
-def text2jira(*, src, server_url, basic_auth, board_name, assignee_key, components, epic_link, max_results=MAX_RESULTS):
+def text2jira(*, src, server_url, basic_auth, project_name, board_name, assignee_key, components, epic_link, max_results=MAX_RESULTS):
     issue_dicts = parse_issues(src)
     create_issues_in_jira(issue_dicts=issue_dicts,
                           server_url=server_url,
                           basic_auth=basic_auth,
+                          project_name=project_name,
                           board_name=board_name,
                           assignee_key=assignee_key,
                           components=components,
@@ -286,7 +292,7 @@ class Text2JiraGUI(tk.Frame):
         self._master = master
         self._master.wm_title('text2jira')
         self._master.resizable(width=False, height=False)
-        self._master.geometry('{}x{}'.format(300, 385))
+        self._master.geometry('{}x{}'.format(300, 425))
         menu_bar = tk.Menu(self._master)
         file_menu = tk.Menu(menu_bar, tearoff=0)
         file_menu.add_command(label='Load', command=self.on_load)
@@ -302,6 +308,9 @@ class Text2JiraGUI(tk.Frame):
         tk.Label(self, text='Server Connection').pack()
         self._servers_combobox = ttk.Combobox(self, width=200)
         self._servers_combobox.pack(padx=5, pady=5)
+        tk.Label(self, text='Project').pack()
+        self._project_name = tk.StringVar()
+        tk.Entry(self, textvariable=self._project_name, width=200).pack(padx=5, pady=5)
         tk.Label(self, text='Board').pack()
         self._board_name = tk.StringVar()
         tk.Entry(self, textvariable=self._board_name, width=200).pack(padx=5, pady=5)
@@ -363,6 +372,11 @@ class Text2JiraGUI(tk.Frame):
             server_url = server_dict['url']
             basic_auth = [server_dict['user'], server_dict['password']]
 
+        project_name = self._board_name.get()
+        if not project_name:
+            showerror('Error', 'You need to inform a project')
+            return
+
         board_name = self._board_name.get()
         if not board_name:
             showerror('Error', 'You need to inform a board')
@@ -389,6 +403,7 @@ class Text2JiraGUI(tk.Frame):
             text2jira(src=src,
                       server_url=server_url,
                       basic_auth=basic_auth,
+                      project_name=project_name,
                       board_name=board_name,
                       assignee_key=assignee_key,
                       components=components,
@@ -408,6 +423,7 @@ def main():
     parser.add_argument('--src', type=str, required=False, help='')
     parser.add_argument('--server_url', type=str, required=False, help='server URL')
     parser.add_argument('--basic_auth', type=str, nargs=2, required=False, help='username and password')
+    parser.add_argument('--project_name', type=str, required=False, help='project name')
     parser.add_argument('--board_name', type=str, required=False, help='board name')
     parser.add_argument('--assignee_key', type=str, required=False, help='assignee key')
     parser.add_argument('--components', type=str, nargs='*', required=False, help='components')
@@ -420,7 +436,7 @@ def main():
             exit(-1)
 
         if args.server_url is None:
-            print('server cannot be None')
+            print('server_url cannot be None')
             exit(-1)
 
         if args.basic_auth is None:
@@ -431,10 +447,19 @@ def main():
             print('assignee_key cannot be None')
             exit(-1)
 
+        if args.project_name is None:
+            print('project_name cannot be None')
+            exit(-1)
+
+        if args.board_name is None:
+            print('board_name cannot be None')
+            exit(-1)
+
         try:
             text2jira(src=args.src,
                       server_url=args.server_url,
                       basic_auth=args.basic_auth,
+                      project_name=args.project_name,
                       board_name=args.board_name,
                       assignee_key=args.assignee_key,
                       components=args.components,
