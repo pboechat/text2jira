@@ -54,7 +54,7 @@ def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, project_name, 
             component_ids.append(component_obj.id)
 
     if epic_link:
-        search_result = jira.search_issues("summary ~ '{}'".format(epic_link))
+        search_result = jira.search_issues('summary ~ "{}"'.format(f'\\"{epic_link}\\"'))
         if len(search_result) == 0:
             raise Exception('epic not found: \'{}\''.format(epic_link))
         elif len(search_result) > 1:
@@ -71,10 +71,11 @@ def create_issues_in_jira(*, issue_dicts, server_url, basic_auth, project_name, 
                 'project': {'key': project.key},
                 'summary': issue_dict['summary'],
                 'description': issue_dict['description'],
-                'issuetype': {'name': 'Task' if parent is None else 'Sub-task'},
-                'assignee': {'name': issue_dict['assignee'] if issue_dict['assignee'] else assignee_key}
+                'issuetype': {'name': 'Task' if parent is None else 'Sub Task'},
             }
         ]
+        if parent is None:
+            fields_list[0]['assignee'] = {'name': issue_dict['assignee'] if issue_dict['assignee'] else assignee_key}
         if component_ids is not None:
             fields_list[0]['components'] = [{'id': component_id} for component_id in component_ids]
         if parent is not None:
@@ -372,7 +373,7 @@ class Text2JiraGUI(tk.Frame):
             server_url = server_dict['url']
             basic_auth = [server_dict['user'], server_dict['password']]
 
-        project_name = self._board_name.get()
+        project_name = self._project_name.get()
         if not project_name:
             showerror('Error', 'You need to inform a project')
             return
@@ -455,17 +456,17 @@ def main():
             print('board_name cannot be None')
             exit(-1)
 
-        try:
-            text2jira(src=args.src,
-                      server_url=args.server_url,
-                      basic_auth=args.basic_auth,
-                      project_name=args.project_name,
-                      board_name=args.board_name,
-                      assignee_key=args.assignee_key,
-                      components=args.components,
-                      epic_link=args.epic_link)
-        except Exception as e:
-            print(str(e))
+        # try:
+        text2jira(src=args.src,
+                  server_url=args.server_url,
+                  basic_auth=args.basic_auth,
+                  project_name=args.project_name,
+                  board_name=args.board_name,
+                  assignee_key=args.assignee_key,
+                  components=args.components,
+                  epic_link=args.epic_link)
+        # except Exception as e:
+        #     print(str(e))
     else:
         root = tk.Tk()
         app = Text2JiraGUI(root)
