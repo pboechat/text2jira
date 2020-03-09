@@ -153,6 +153,8 @@ def parse_lines(lines):
                 continue
             sub_issue = dict(summary=text, sub_issues=[], description='', assignee=assignee)
             curr_description_holder = sub_issue
+            if curr_issue is None:
+                raise Exception(f"Sub-task '{text}' has no parent task.")
             curr_issue['sub_issues'].append(sub_issue)
         elif code == '*':
             if curr_description_holder is None:
