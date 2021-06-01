@@ -22,7 +22,7 @@ setup(
         "requests-oauthlib==0.8.0",
         "requests-toolbelt==0.8.0",
         "six==1.10.0",
-        "urllib3==1.21.1"
+        "urllib3==1.26.5"
     ],
     entry_points = {
         "console_scripts": ['text2jira = text2jira:main']
