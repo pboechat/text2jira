@@ -10,7 +10,7 @@ setup(
     package_dir={'': 'src'},
     py_modules=['text2jira'],
     install_requires = [
-        "certifi==2017.4.17",
+        "certifi==2022.12.7",
         "chardet==3.0.4",
         "defusedxml==0.5.0",
         "idna==2.5",
