@@ -18,7 +18,7 @@ setup(
         "oauthlib==2.0.2",
         "pbr==3.0.1",
         "python-dateutil==2.6.0",
-        "requests==2.17.3",
+        "requests==2.20.0",
         "requests-oauthlib==0.8.0",
         "requests-toolbelt==0.8.0",
         "six==1.10.0",
